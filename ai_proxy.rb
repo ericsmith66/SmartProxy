@@ -113,8 +113,15 @@ post '/v1/chat/completions' do
   end
 
   # Force non-streaming for both Ollama and Grok — stable single JSON response
-  request_body['stream'] = false
 
+  user_agent = request.env['HTTP_USER_AGENT'] || ''
+  is_continue_jetbrains = user_agent.downcase.include?('Js/JS 5.23.2') || user_agent.downcase.include?('jetbrains')
+
+  request_body['stream'] = false
+  if user_agent == 'Js/JS 5.23.2' then request_body['stream'] = true end
+
+  LOGGER.info "Streaming: #{request_body['stream']}"
+  LOGGER.info "User-Agent: #{user_agent}"
   LOGGER.info "Routing to #{route[:provider]} (model: #{request_body['model']})"
   LOGGER.info "FULL REQUEST BODY: #{request_body.to_json}"
 
