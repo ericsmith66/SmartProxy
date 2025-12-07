@@ -30,6 +30,10 @@ SmartProxy enables:
 3. **Health check** — `/health` endpoint
 4. **Cost tracking** — log Grok token usage
 5. **Docker support** — containerize for easier deployment
+6. **Grok 4.1** support - for some reason we can only use grok 3
+7. **validate** json response is valid openai ( grok and ollama are not)
+8. **clean cruft** Refactor so the code is cleaner 
+
 
 The proxy is **stable and production-ready** in non-streaming mode — great for the Internship Edition launch.
 
