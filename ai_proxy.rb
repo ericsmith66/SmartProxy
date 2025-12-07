@@ -1,4 +1,4 @@
-# ai_proxy.rb — Smart AI Proxy for NextGen Wealth Advisor (complete, stable, OpenAI-compatible responses)
+# ai_proxy.rb — Smart AI Proxy for NextGen Wealth Advisor (Ollama stable + Grok non-streaming)
 require 'sinatra'
 require 'faraday'
 require 'json'
@@ -21,11 +21,11 @@ OLLAMA_URL = 'http://localhost:11434/api/chat'
 GROK_URL = 'https://api.x.ai/v1/chat/completions'
 GROK_API_KEY = ENV['GROK_API_KEY']
 
-# Keyword overrides (case-insensitive)
+# Keyword overrides
 OVERRIDE_LOCAL = ['#local', '#ollama', '#70b', '#405b']
 OVERRIDE_GROK = ['#hey grok', '#heygrok', '#grok', '#architect']
 
-# Privacy-sensitive keywords (force local)
+# Privacy-sensitive keywords
 PRIVACY_KEYWORDS = [
   'plaid', 'portfolio', 'internship', 'paycheck', 'roth', 'trust',
   'estate tax', 'family net worth', 'philanthropy', 'gusto', 'deductible'
@@ -34,20 +34,34 @@ PRIVACY_KEYWORDS = [
 # Architecture/debug keywords
 ARCHITECTURE_KEYWORDS = ['prompt', 'agent', 'debug', 'rollback', 'workflow', 'architecture']
 
-def route_provider(messages)
-  user_message = messages.last['content']
+def route_provider(request_body)
+  messages = request_body['messages'] || []
+  user_message = messages.last ? messages.last['content'] : ''
   downcased = user_message.downcase.gsub(/[^a-z0-9#]/, '')
 
-  # Keyword override highest priority
+  requested_model = request_body['model'] || ''
+
+  # Model selection override — if user picked grok-3, use Grok
+  if requested_model.downcase.include?('grok')
+    if GROK_API_KEY
+      LOGGER.info "Model selection override: Grok (requested model '#{requested_model}')"
+      return { provider: 'grok', model: 'grok-3' }
+    else
+      LOGGER.info "Grok model requested but key missing — fallback to Ollama"
+    end
+  end
+
+  # Keyword override
   if OVERRIDE_GROK.any? { |k| downcased.include?(k.tr('#', '').downcase) } || downcased.include?('heygrok')
     if GROK_API_KEY
       LOGGER.info "Override: Grok (keyword in '#{user_message}')"
       return { provider: 'grok', model: 'grok-3' }
     else
-      LOGGER.info "Grok override requested but GROK_API_KEY missing — fallback to Ollama"
+      LOGGER.info "Grok override requested but key missing — fallback to Ollama"
     end
   end
 
+  # Local override
   if OVERRIDE_LOCAL.any? { |k| downcased.include?(k.tr('#', '').downcase) }
     model = downcased.include?('405b') ? 'llama3.1:405b' : 'llama3.1:70b'
     LOGGER.info "Override: Ollama #{model} (keyword in '#{user_message}')"
@@ -56,14 +70,14 @@ def route_provider(messages)
 
   # Privacy-sensitive → force local
   if PRIVACY_KEYWORDS.any? { |k| downcased.include?(k) }
-    LOGGER.info "Privacy route: local Ollama 70B (matched keyword in '#{user_message}')"
+    LOGGER.info "Privacy route: local Ollama 70B"
     return { provider: 'ollama', model: 'llama3.1:70b' }
   end
 
   # Architecture/debug → Grok
   if ARCHITECTURE_KEYWORDS.any? { |k| downcased.include?(k) }
     if GROK_API_KEY
-      LOGGER.info "Architecture route: Grok (matched keyword in '#{user_message}')"
+      LOGGER.info "Architecture route: Grok"
       return { provider: 'grok', model: 'grok-3' }
     end
   end
@@ -75,7 +89,7 @@ end
 
 set :port, 11435
 
-# CORS headers and OPTIONS preflight
+# CORS + OPTIONS
 before do
   headers['Access-Control-Allow-Origin'] = '*'
   headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
@@ -89,7 +103,7 @@ end
 
 post '/v1/chat/completions' do
   request_body = JSON.parse(request.body.read)
-  route = route_provider(request_body['messages'])
+  route = route_provider(request_body)
 
   # Force model override for Grok
   if route[:provider] == 'grok'
@@ -98,10 +112,8 @@ post '/v1/chat/completions' do
     request_body['model'] ||= route[:model]
   end
 
-  # Force non-streaming for Ollama — stable single JSON response
-  if route[:provider] == 'ollama'
-    request_body['stream'] = false
-  end
+  # Force non-streaming for both Ollama and Grok — stable single JSON response
+  request_body['stream'] = false
 
   LOGGER.info "Routing to #{route[:provider]} (model: #{request_body['model']})"
   LOGGER.info "FULL REQUEST BODY: #{request_body.to_json}"
@@ -117,7 +129,6 @@ post '/v1/chat/completions' do
         ollama_json = JSON.parse(ollama_body)
         content = ollama_json["message"]["content"] || ""
 
-        # Convert Ollama format to OpenAI format
         openai_response = {
           "id": "chatcmpl-#{SecureRandom.hex(4)}",
           "object": "chat.completion",
@@ -179,7 +190,7 @@ get '/v1' do
   <a href='/v1/models'>List models</a> | <a href='/v1/openapi.json'>OpenAPI spec</a>"
 end
 
-# Model list — OpenWebUI uses this heavily
+# Model list
 get '/v1/models' do
   content_type :json
   data = [
@@ -193,7 +204,7 @@ get '/v1/models' do
   }.to_json
 end
 
-# OpenAPI spec — OpenWebUI validates this
+# OpenAPI spec
 get '/v1/openapi.json' do
   content_type :json
   {
