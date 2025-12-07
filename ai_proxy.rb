@@ -41,11 +41,11 @@ def route_provider(request_body)
 
   requested_model = request_body['model'] || ''
 
-  # Model selection override — if user picked grok-3, use Grok
+  # Model selection override — if user picked grok-4-fast-reasoning, use Grok
   if requested_model.downcase.include?('grok')
     if GROK_API_KEY
       LOGGER.info "Model selection override: Grok (requested model '#{requested_model}')"
-      return { provider: 'grok', model: 'grok-3' }
+      return { provider: 'grok', model: 'grok-4-fast-reasoning' }
     else
       LOGGER.info "Grok model requested but key missing — fallback to Ollama"
     end
@@ -55,7 +55,7 @@ def route_provider(request_body)
   if OVERRIDE_GROK.any? { |k| downcased.include?(k.tr('#', '').downcase) } || downcased.include?('heygrok')
     if GROK_API_KEY
       LOGGER.info "Override: Grok (keyword in '#{user_message}')"
-      return { provider: 'grok', model: 'grok-3' }
+      return { provider: 'grok', model: 'grok-4-fast-reasoning' }
     else
       LOGGER.info "Grok override requested but key missing — fallback to Ollama"
     end
@@ -78,7 +78,7 @@ def route_provider(request_body)
   if ARCHITECTURE_KEYWORDS.any? { |k| downcased.include?(k) }
     if GROK_API_KEY
       LOGGER.info "Architecture route: Grok"
-      return { provider: 'grok', model: 'grok-3' }
+      return { provider: 'grok', model: 'grok-4-fast-reasoning' }
     end
   end
 
@@ -162,7 +162,7 @@ post '/v1/chat/completions' do
     end
 
   when 'grok'
-    LOGGER.info "Sending to Grok (grok-3)"
+    LOGGER.info "Sending to Grok (grok-4-fast-reasoning)"
     LOGGER.info "GROK REQUEST BODY: #{request_body.to_json}"
     conn = Faraday.new(url: 'https://api.x.ai') do |f|
       f.headers['Authorization'] = "Bearer #{GROK_API_KEY}"
@@ -197,7 +197,7 @@ get '/v1/models' do
     { "id": "llama3.1:70b", "object": "model", "created": Time.now.to_i, "owned_by": "ollama" },
     { "id": "llama3.1:405b", "object": "model", "created": Time.now.to_i, "owned_by": "ollama" }
   ]
-  data << { "id": "grok-3", "object": "model", "created": Time.now.to_i, "owned_by": "grok" } if GROK_API_KEY
+  data << { "id": "grok-4-fast-reasoning", "object": "model", "created": Time.now.to_i, "owned_by": "grok" } if GROK_API_KEY
   {
     "object": "list",
     "data": data
